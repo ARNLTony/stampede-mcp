@@ -46,7 +46,16 @@ It's a thin adapter over the public Stampede REST API: each MCP tool maps to a r
 | `search_all` | Combined stamps + profiles search. |
 | `suggest` | Fast autocomplete: ~10 stamps + 6 profiles + 3 collections, plus wallet detection. |
 
-All tools are **read-only**. Write actions (likes, comments) are planned for a future release — the underlying API already supports them via scoped API keys.
+**Write** (require `STAMPEDE_API_KEY` with write scopes — see below)
+
+| Tool | What it does | Scope |
+|------|--------------|-------|
+| `like_stamp` / `unlike_stamp` | Like / unlike a stamp. | `write:reactions` |
+| `favorite_stamp` / `unfavorite_stamp` | Add / remove a stamp from your wishlist. | `write:reactions` |
+| `post_comment` | Comment on a stamp or collection (with optional reply). | `write:comments` |
+| `add_reaction` / `remove_reaction` | Add / remove an emoji reaction on a discussion post (max 3/post). | `write:reactions` |
+
+The read tools work anonymously. The write tools act as the profile your API key is bound to, and return a clear `NO_API_KEY` error if no key is set.
 
 ## Install
 
@@ -61,7 +70,7 @@ Set via environment variables (see [`.env.example`](.env.example)):
 | Var | Required | Default |
 |-----|----------|---------|
 | `STAMPEDE_API_BASE` | No | `https://stampede-liard.vercel.app/api/v1` |
-| `STAMPEDE_API_KEY` | No | _none_ (anonymous) — sent as `X-API-Key`; needs `read:stamps` + `read:profiles` scopes |
+| `STAMPEDE_API_KEY` | No | _none_ (anonymous) — sent as `X-API-Key`. Issue one from the Stampede **Developer** page. Reads need `read:stamps` + `read:profiles`; writes need `write:reactions` and/or `write:comments`. |
 
 ## Use with Claude Desktop
 

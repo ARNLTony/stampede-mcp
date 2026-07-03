@@ -2,13 +2,15 @@
 /**
  * Stampede MCP server
  *
- * Exposes the read-only surface of the public Stampede API (https://stampede-liard.vercel.app)
- * as MCP tools, so any MCP client (Claude Desktop, Claude Code, etc.) can query
- * Bitcoin Stamps data in natural language.
+ * Exposes the public Stampede API (https://stampede-liard.vercel.app) as MCP
+ * tools, so any MCP client (Claude Desktop, Claude Code, etc.) can query and
+ * interact with Bitcoin Stamps data in natural language.
  *
- * Auth: optional. Set STAMPEDE_API_KEY to send an X-API-Key header. The read
- * endpoints work anonymously, but a key gives you attribution and rate limits.
- * The key must carry the `read:stamps` and `read:profiles` scopes.
+ * Auth: read tools work anonymously. Set STAMPEDE_API_KEY to send an X-API-Key
+ * header — this gives reads attribution/rate limits and UNLOCKS the write tools
+ * (like, favorite, comment, react). Writes act as the profile the key is bound
+ * to and require the relevant scope: read:stamps + read:profiles for reads,
+ * write:reactions and/or write:comments for writes.
  *
  * Config (env vars):
  *   STAMPEDE_API_BASE  Base URL incl. version. Default: https://stampede-liard.vercel.app/api/v1
@@ -47,6 +49,45 @@ async function apiGet(path, params = {}) {
   return { status: res.status, body }
 }
 
+/**
+ * Send a write request (POST/PUT/DELETE) with an optional JSON body.
+ * Write endpoints REQUIRE authentication, so this short-circuits with a clear
+ * error if no API key is configured. The action is performed as the profile the
+ * key is bound to.
+ */
+async function apiSend(method, path, body) {
+  if (!API_KEY) {
+    return {
+      status: 401,
+      body: {
+        success: false,
+        error: {
+          code: 'NO_API_KEY',
+          message: 'This action requires authentication. Set STAMPEDE_API_KEY (issued from the Stampede Developer page, with the write:reactions and/or write:comments scope) to enable write tools.',
+        },
+      },
+    }
+  }
+
+  const url = new URL(API_BASE + path)
+  const headers = { Accept: 'application/json', 'X-API-Key': API_KEY }
+  const init = { method, headers }
+  if (body !== undefined) {
+    headers['Content-Type'] = 'application/json'
+    init.body = JSON.stringify(body)
+  }
+
+  const res = await fetch(url, init)
+  const text = await res.text()
+  let parsed
+  try {
+    parsed = JSON.parse(text)
+  } catch {
+    parsed = { success: false, error: { code: 'NON_JSON_RESPONSE', message: text.slice(0, 500) } }
+  }
+  return { status: res.status, body: parsed }
+}
+
 /** Wrap an API result as an MCP tool text response. */
 function toResult({ status, body }) {
   const isError = status >= 400 || body?.success === false
@@ -58,7 +99,7 @@ function toResult({ status, body }) {
 
 const server = new McpServer({
   name: 'stampede-mcp',
-  version: '0.2.0',
+  version: '0.3.0',
 })
 
 // ---------------------------------------------------------------------------
@@ -282,6 +323,87 @@ server.tool(
     ...pagination,
   },
   async ({ id, indexId, page, limit }) => toResult(await apiGet(`/directories/${id}/stamps`, { indexId, page, limit }))
+)
+
+// ---------------------------------------------------------------------------
+// Tier 3: write tools (require STAMPEDE_API_KEY with write scopes).
+// Actions are performed as the profile the key is bound to.
+// ---------------------------------------------------------------------------
+
+server.tool(
+  'like_stamp',
+  'Like a stamp on behalf of the authenticated profile, by stamp NUMBER. Requires an API key with the write:reactions scope. Idempotent — liking twice is a no-op.',
+  {
+    id: z.number().int().min(0).describe('The stamp number (integer).'),
+  },
+  async ({ id }) => toResult(await apiSend('POST', `/stamps/${id}/like`))
+)
+
+server.tool(
+  'unlike_stamp',
+  'Remove the authenticated profile\'s like from a stamp, by stamp NUMBER. Requires an API key with the write:reactions scope.',
+  {
+    id: z.number().int().min(0).describe('The stamp number (integer).'),
+  },
+  async ({ id }) => toResult(await apiSend('DELETE', `/stamps/${id}/like`))
+)
+
+server.tool(
+  'favorite_stamp',
+  'Add a stamp to the authenticated profile\'s wishlist/favorites, by stamp NUMBER. Requires an API key with the write:reactions scope. Idempotent.',
+  {
+    id: z.number().int().min(0).describe('The stamp number (integer).'),
+  },
+  async ({ id }) => toResult(await apiSend('POST', `/stamps/${id}/favorite`))
+)
+
+server.tool(
+  'unfavorite_stamp',
+  'Remove a stamp from the authenticated profile\'s wishlist/favorites, by stamp NUMBER. Requires an API key with the write:reactions scope.',
+  {
+    id: z.number().int().min(0).describe('The stamp number (integer).'),
+  },
+  async ({ id }) => toResult(await apiSend('DELETE', `/stamps/${id}/favorite`))
+)
+
+server.tool(
+  'post_comment',
+  'Post a comment in a stamp or collection discussion, as the authenticated profile. Provide EXACTLY ONE of stampId or collectionId. Optionally set parentPostId to reply to an existing post. Requires an API key with the write:comments scope.',
+  {
+    content: z.string().min(1).max(10000).describe('The comment text (1–10,000 characters).'),
+    stampId: z.number().int().min(0).optional().describe('Stamp number to comment on. Provide this OR collectionId, not both.'),
+    collectionId: z.number().int().min(0).optional().describe('Collection ID to comment on. Provide this OR stampId, not both.'),
+    parentPostId: z.number().int().min(0).optional().describe('ID of the post being replied to (must belong to the same stamp/collection).'),
+  },
+  async ({ content, stampId, collectionId, parentPostId }) => {
+    if ((stampId == null && collectionId == null) || (stampId != null && collectionId != null)) {
+      return toResult({
+        status: 400,
+        body: { success: false, error: { code: 'VALIDATION_ERROR', message: 'Provide exactly one of stampId or collectionId.' } },
+      })
+    }
+    return toResult(await apiSend('POST', '/discussions', { content, stampId, collectionId, parentPostId }))
+  }
+)
+
+server.tool(
+  'add_reaction',
+  'Add an emoji reaction to a discussion post, as the authenticated profile. Max 3 distinct emoji per post per profile. Requires an API key with the write:reactions scope.',
+  {
+    postId: z.number().int().min(0).describe('The discussion post ID.'),
+    emoji: z.string().min(1).max(10).describe('A single emoji (max 10 chars; no < > " \' & characters).'),
+  },
+  async ({ postId, emoji }) => toResult(await apiSend('POST', `/discussions/${postId}/reactions`, { emoji }))
+)
+
+server.tool(
+  'remove_reaction',
+  'Remove the authenticated profile\'s emoji reaction from a discussion post. Requires an API key with the write:reactions scope.',
+  {
+    postId: z.number().int().min(0).describe('The discussion post ID.'),
+    emoji: z.string().min(1).max(10).describe('The emoji reaction to remove.'),
+  },
+  async ({ postId, emoji }) => toResult(await apiSend('DELETE', `/discussions/${postId}/reactions/${encodeURIComponent(emoji)}`))
 )
 
 // ---------------------------------------------------------------------------
