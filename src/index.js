@@ -58,7 +58,7 @@ function toResult({ status, body }) {
 
 const server = new McpServer({
   name: 'stampede-mcp',
-  version: '0.1.0',
+  version: '0.2.0',
 })
 
 // ---------------------------------------------------------------------------
@@ -151,6 +151,137 @@ server.tool(
     id: z.number().int().min(0).describe('The numeric profile ID.'),
   },
   async ({ id }) => toResult(await apiGet(`/profiles/${id}`))
+)
+
+// ---------------------------------------------------------------------------
+// Tier 2: sub-resource reads (discussion, holders, profile activity,
+// collections, directories)
+// ---------------------------------------------------------------------------
+
+server.tool(
+  'get_stamp_discussion',
+  'Get the discussion thread (comments and emoji reactions) for a single stamp, by stamp NUMBER. Returns posts in chronological order.',
+  {
+    id: z.number().int().min(0).describe('The stamp number (integer).'),
+  },
+  async ({ id }) => toResult(await apiGet(`/stamps/${id}/discussion`))
+)
+
+server.tool(
+  'get_stamp_holders',
+  'List the current holders (addresses) of a stamp, by stamp NUMBER. Known Stampede profiles are enriched onto matching addresses. Sourced live from stampchain.',
+  {
+    id: z.number().int().min(0).describe('The stamp number (integer).'),
+    page: z.number().int().min(1).optional().describe('Page number (1-based). Default 1.'),
+    limit: z.number().int().min(1).max(100).optional().describe('Results per page. Default 20, max 100.'),
+  },
+  async ({ id, page, limit }) => toResult(await apiGet(`/stamps/${id}/holders`, { page, limit }))
+)
+
+server.tool(
+  'get_stamp_dispensers',
+  'List the open dispensers (sale listings) for a stamp, by stamp NUMBER. Sourced live from stampchain.',
+  {
+    id: z.number().int().min(0).describe('The stamp number (integer).'),
+    page: z.number().int().min(1).optional().describe('Page number (1-based). Default 1.'),
+    limit: z.number().int().min(1).max(100).optional().describe('Results per page. Default 20, max 100.'),
+  },
+  async ({ id, page, limit }) => toResult(await apiGet(`/stamps/${id}/dispensers`, { page, limit }))
+)
+
+server.tool(
+  'get_profile_stamps',
+  'List the stamps created by a profile, by numeric profile ID. Newest first.',
+  {
+    id: z.number().int().min(0).describe('The numeric profile ID.'),
+    ...pagination,
+  },
+  async ({ id, page, limit }) => toResult(await apiGet(`/profiles/${id}/stamps`, { page, limit }))
+)
+
+server.tool(
+  'get_profile_favorites',
+  "List a profile's public wishlist — the stamps they have favorited — by numeric profile ID. Most recently favorited first.",
+  {
+    id: z.number().int().min(0).describe('The numeric profile ID.'),
+    ...pagination,
+  },
+  async ({ id, page, limit }) => toResult(await apiGet(`/profiles/${id}/favorites`, { page, limit }))
+)
+
+server.tool(
+  'get_profile_collections',
+  "List a profile's public collections, by numeric profile ID, each with a stamp count.",
+  {
+    id: z.number().int().min(0).describe('The numeric profile ID.'),
+    ...pagination,
+  },
+  async ({ id, page, limit }) => toResult(await apiGet(`/profiles/${id}/collections`, { page, limit }))
+)
+
+server.tool(
+  'get_profile_followers',
+  'List the followers of a profile, by numeric profile ID. Most recent first.',
+  {
+    id: z.number().int().min(0).describe('The numeric profile ID.'),
+    ...pagination,
+  },
+  async ({ id, page, limit }) => toResult(await apiGet(`/profiles/${id}/followers`, { page, limit }))
+)
+
+server.tool(
+  'get_profile_following',
+  'List the profiles a profile is following, by numeric profile ID. Most recent first.',
+  {
+    id: z.number().int().min(0).describe('The numeric profile ID.'),
+    ...pagination,
+  },
+  async ({ id, page, limit }) => toResult(await apiGet(`/profiles/${id}/following`, { page, limit }))
+)
+
+server.tool(
+  'list_collections',
+  'Browse public curated collections of stamps, ranked by follower count then recency. Each collection includes owner info, stamp/follower/like counts, and a preview of up to 32 stamps.',
+  {
+    ...pagination,
+  },
+  async ({ page, limit }) => toResult(await apiGet('/collections', { page, limit }))
+)
+
+server.tool(
+  'get_collection',
+  'Get a single public collection by its numeric ID, including owner info, counts, and the full list of stamps in the collection.',
+  {
+    id: z.number().int().min(0).describe('The numeric collection ID.'),
+  },
+  async ({ id }) => toResult(await apiGet(`/collections/${id}`))
+)
+
+server.tool(
+  'list_directories',
+  'List the official stamp directories (curated catalogues such as named indexes). No parameters. Use get_directory_stamps to browse the stamps inside one.',
+  {},
+  async () => toResult(await apiGet('/directories'))
+)
+
+server.tool(
+  'get_directory_indexes',
+  'List the indexes (sub-sections/releases) within a directory, by numeric directory ID. Use an index ID to filter get_directory_stamps.',
+  {
+    id: z.number().int().min(0).describe('The numeric directory ID.'),
+  },
+  async ({ id }) => toResult(await apiGet(`/directories/${id}/indexes`))
+)
+
+server.tool(
+  'get_directory_stamps',
+  'List the stamps catalogued in a directory, by numeric directory ID. Optionally filter to a single index. Most recently added first.',
+  {
+    id: z.number().int().min(0).describe('The numeric directory ID.'),
+    indexId: z.number().int().min(0).optional().describe('Optional numeric directory index ID to filter by.'),
+    ...pagination,
+  },
+  async ({ id, indexId, page, limit }) => toResult(await apiGet(`/directories/${id}/stamps`, { indexId, page, limit }))
 )
 
 // ---------------------------------------------------------------------------
