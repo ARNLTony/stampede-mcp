@@ -100,6 +100,8 @@ Add to your `claude_desktop_config.json`:
 
 Omit the `env` block to run read-only (anonymous).
 
+> **Windows:** use `"command": "cmd"` with `"args": ["/c", "npx", "-y", "stampede-mcp"]`. Windows can't spawn `npx` directly (it's `npx.cmd`), so it must go through `cmd /c`. See [Windows notes](#windows) below.
+
 ## Use with Claude Code
 
 ```bash
@@ -109,6 +111,21 @@ claude mcp add stampede -- npx -y stampede-mcp
 # with a key (unlocks write tools), available in every project
 claude mcp add -s user stampede -e STAMPEDE_API_KEY=your_key -- npx -y stampede-mcp
 ```
+
+<a name="windows"></a>
+### Windows
+
+On Windows, `npx` resolves to `npx.cmd`, which can't be spawned directly by an MCP client — you'll get a connection error like `Failed to reconnect: -32000`. Prefix the command with `cmd /c`:
+
+```bash
+# read-only
+claude mcp add stampede -- cmd /c npx -y stampede-mcp
+
+# with a key
+claude mcp add -s user stampede -e STAMPEDE_API_KEY=your_key -- cmd /c npx -y stampede-mcp
+```
+
+For Claude Desktop, use `"command": "cmd"` and `"args": ["/c", "npx", "-y", "stampede-mcp"]`.
 
 ## Develop
 
