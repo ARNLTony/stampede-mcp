@@ -99,7 +99,7 @@ function toResult({ status, body }) {
 
 const server = new McpServer({
   name: 'stampede-mcp',
-  version: '0.3.0',
+  version: '0.3.1',
 })
 
 // ---------------------------------------------------------------------------

@@ -59,8 +59,16 @@ The read tools work anonymously. The write tools act as the profile your API key
 
 ## Install
 
+Published on npm — no clone required. Any MCP client can launch it with `npx`:
+
 ```bash
-npm install
+npx -y stampede-mcp
+```
+
+Or install globally:
+
+```bash
+npm install -g stampede-mcp
 ```
 
 ## Configuration
@@ -80,8 +88,8 @@ Add to your `claude_desktop_config.json`:
 {
   "mcpServers": {
     "stampede": {
-      "command": "node",
-      "args": ["/absolute/path/to/stampede-mcp/src/index.js"],
+      "command": "npx",
+      "args": ["-y", "stampede-mcp"],
       "env": {
         "STAMPEDE_API_KEY": "optional-key-here"
       }
@@ -90,17 +98,26 @@ Add to your `claude_desktop_config.json`:
 }
 ```
 
+Omit the `env` block to run read-only (anonymous).
+
 ## Use with Claude Code
 
 ```bash
-claude mcp add stampede -- node /absolute/path/to/stampede-mcp/src/index.js
+# read-only
+claude mcp add stampede -- npx -y stampede-mcp
+
+# with a key (unlocks write tools), available in every project
+claude mcp add -s user stampede -e STAMPEDE_API_KEY=your_key -- npx -y stampede-mcp
 ```
 
 ## Develop
 
-Run the MCP Inspector to try the tools interactively:
+Clone the repo, install dev dependencies, then run the MCP Inspector to try the tools interactively:
 
 ```bash
+git clone https://github.com/ARNLTony/stampede-mcp.git
+cd stampede-mcp
+npm install
 npm run inspect
 ```
 
